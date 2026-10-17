@@ -1,0 +1,11 @@
+.env
+.env.example
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+data/uploads/
+data/evaluation_metrics.jsonl
+vector_store/*
+!vector_store/.gitkeep
+!data/.gitkeep
