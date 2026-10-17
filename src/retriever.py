@@ -6,6 +6,7 @@ import logging
 import os
 import re
 from collections import defaultdict
+from heapq import nlargest
 from pathlib import Path
 
 from langchain_chroma import Chroma
@@ -93,8 +94,12 @@ class HybridRerankingRetriever:
 
         if self._bm25 is not None:
             scores = self._bm25.get_scores(_tokens(query))
-            lexical_ranks = sorted(range(len(scores)), key=lambda index: scores[index], reverse=True)
-            for rank, index in enumerate(lexical_ranks[: self.initial_k], start=1):
+            lexical_top_indices = nlargest(
+                self.initial_k,
+                range(len(scores)),
+                key=lambda index: float(scores[index]),
+            )
+            for rank, index in enumerate(lexical_top_indices, start=1):
                 document = self._documents[index]
                 key = self._document_key(document)
                 candidates[key] = document

@@ -167,6 +167,7 @@ answer, or document text to this file.
 - Validate citation targets against retrieved source filenames and page numbers.
 - Inspect retrieved passages and index statistics in the UI.
 - Tune answer temperature and the number of passages returned to the generator.
+- Reuse cached local search models and index statistics across Streamlit reruns.
 - Evaluate the latest answer with lightweight, explicitly labeled proxies.
 - Log aggregate evaluation values without logging query, response, or source
   text.
@@ -285,9 +286,25 @@ Streamlit prints the local URL to open in a browser. Typical usage:
 
 The first index build downloads the embedding model; the first query loads the
 Cross-Encoder model. Initial setup can therefore take longer and require
-internet access.
+internet access. Subsequent reruns reuse the loaded models and cached index
+statistics; rebuilding the index invalidates the search and statistics caches
+without discarding the embedding model cache.
+
+## Tests
+
+Run the focused unit tests from PowerShell in the project directory:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+The tests cover hybrid candidate selection, reranking, and citation target
+validation without making provider API calls or downloading model weights.
 
 ## Project layout
+
+For the detailed project need, use cases, technology choices, and end-to-end
+processing workflow, see [worflow.md](./worflow.md).
 
 ```text
 ShryAI/
@@ -378,6 +395,6 @@ implementation:
 - Authentication, authorization, and document-level access controls.
 - More robust semantic evaluation with curated reference datasets and
   independently configured RAGAS metrics.
-- Automated test coverage for ingestion, retrieval, generation, and evaluation.
+- Broader automated test coverage for ingestion, generation, and evaluation.
 - Deployment controls for secrets, provider data flows, logging, and
   operational monitoring.

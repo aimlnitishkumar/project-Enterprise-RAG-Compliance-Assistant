@@ -139,14 +139,13 @@ def rebuild_vector_store(
 def get_index_stats(
     persist_directory: str | Path,
     *,
-    embeddings: HuggingFaceEmbeddings | None = None,
     collection_name: str = DEFAULT_COLLECTION_NAME,
 ) -> tuple[int, int]:
     """Return the indexed chunk count and distinct source-file count."""
-    store = get_vector_store(
-        persist_directory,
-        embeddings=embeddings,
+    store = Chroma(
         collection_name=collection_name,
+        embedding_function=None,
+        persist_directory=str(Path(persist_directory).expanduser().resolve()),
     )
     records = store.get(include=["metadatas"])
     metadatas = records.get("metadatas") or []
