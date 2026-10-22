@@ -7,7 +7,7 @@ import os
 import shutil
 from io import BytesIO
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 import fitz
 import pytesseract
@@ -132,6 +132,7 @@ def load_and_split_pdfs(
     *,
     chunk_size: int = 500,
     chunk_overlap: int = 50,
+    source_names: Mapping[str, str] | None = None,
 ) -> list[Document]:
     """Load PDFs and split pages while retaining a one-based page number."""
     paths = [Path(path).expanduser().resolve() for path in pdf_paths]
@@ -156,7 +157,7 @@ def load_and_split_pdfs(
         try:
             pages = _extract_pdf_pages(path)
         except Exception:
-            logger.exception("Failed to load PDF %s", path)
+            logger.exception("Failed to extract text from an uploaded PDF")
             raise
 
         pages_with_text = [
@@ -175,12 +176,11 @@ def load_and_split_pdfs(
         ]
         if empty_page_numbers:
             logger.warning(
-                "%s has no extractable text on page(s) %s",
-                path.name,
+                "A PDF has no extractable text on page(s) %s",
                 ", ".join(map(str, empty_page_numbers)),
             )
         for page in pages:
-            page.metadata["source"] = path.name
+            page.metadata["source"] = (source_names or {}).get(str(path), path.name)
             page.metadata["page"] = int(page.metadata.get("page", 0)) + 1
         chunks.extend(splitter.split_documents(pages))
 
@@ -210,9 +210,10 @@ def rebuild_vector_store(
     *,
     embeddings: HuggingFaceEmbeddings | None = None,
     collection_name: str = DEFAULT_COLLECTION_NAME,
+    source_names: Mapping[str, str] | None = None,
 ) -> tuple[Chroma, int]:
     """Replace the collection contents with chunks from the selected PDFs."""
-    documents = load_and_split_pdfs(pdf_paths)
+    documents = load_and_split_pdfs(pdf_paths, source_names=source_names)
     vector_store = get_vector_store(
         persist_directory,
         embeddings=embeddings,

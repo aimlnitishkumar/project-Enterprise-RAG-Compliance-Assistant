@@ -1,0 +1,124 @@
+{% extends "documents/base.html" %}
+{% block title %}Research workspace · ShryAI{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">PERSONAL DOCUMENT RESEARCH</p>
+  <h1>Answers grounded in your documents.</h1>
+  <p>Upload a doctor-provided document and ask questions about what it says. Your uploaded files and search index are private to your account.</p>
+</section>
+
+<section class="privacy-notice" role="note">
+  <strong>Health information and privacy</strong>
+  <p>ShryAI retrieves only relevant excerpts, but the selected AI provider receives those excerpts and your question to generate a response. Check your provider’s privacy terms before uploading sensitive health records. Answers explain documents; they do not diagnose or replace your doctor. For emergencies, contact local emergency services.</p>
+</section>
+
+<div class="workspace-grid">
+  <section class="panel">
+    <h2>Your documents</h2>
+    <p class="muted">PDF files only, up to 20 MB each. Image text is read with OCR when Tesseract is installed.</p>
+    <form class="upload-form" method="post" action="{% url 'document-upload' %}" enctype="multipart/form-data">
+      {% csrf_token %}
+      <label class="field-label" for="pdf-file">Add a PDF</label>
+      <input id="pdf-file" name="file" type="file" accept="application/pdf,.pdf" required>
+      <button class="button button-primary" type="submit">Upload and index</button>
+    </form>
+    {% if documents %}
+      <ul class="document-list">
+        {% for document in documents %}
+          <li class="document-item">
+            <div>
+              <strong>{{ document.original_name }}</strong>
+              <span class="muted document-date">Added {{ document.created_at|date:"M j, Y" }}</span>
+            </div>
+            <div class="document-actions">
+              <a href="{% url 'document-download' document.id %}">Download</a>
+              <form method="post" action="{% url 'document-delete' document.id %}" onsubmit="return confirm('Delete this PDF and rebuild your private index?')">
+                {% csrf_token %}
+                <button class="text-button danger-text" type="submit">Delete</button>
+              </form>
+            </div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-state">No PDFs yet. Upload a document to begin.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel chat-panel">
+    <h2>Ask about your documents</h2>
+    <p class="muted">Answers cite the source PDF and page. Questions and answers are not saved in a chat history.</p>
+    <div id="chat-output" class="chat-output" aria-live="polite"></div>
+    <form id="chat-form" class="chat-form">
+      {% csrf_token %}
+      <label class="field-label" for="question">Your question</label>
+      <textarea id="question" name="question" rows="4" minlength="2" maxlength="2000" required placeholder="What does the document say about…"></textarea>
+      <button id="ask-button" class="button button-primary" type="submit">Ask ShryAI</button>
+    </form>
+  </section>
+</div>
+
+<details class="account-danger-zone">
+  <summary>Delete account and all uploaded documents</summary>
+  <p>This permanently removes your account, uploaded PDFs, and private vector collection.</p>
+  <form method="post" action="{% url 'account-delete' %}" onsubmit="return confirm('Permanently delete your account and all uploaded documents?')">
+    {% csrf_token %}
+    <label class="field-label" for="delete-password">Confirm your password</label>
+    <input id="delete-password" name="password" type="password" autocomplete="current-password" required>
+    <button class="button button-danger" type="submit">Delete my account</button>
+  </form>
+</details>
+
+<script>
+(() => {
+  const form = document.getElementById("chat-form");
+  const output = document.getElementById("chat-output");
+  const button = document.getElementById("ask-button");
+  const csrfToken = form.querySelector("[name=csrfmiddlewaretoken]").value;
+
+  function showText(tag, className, text) {
+    const element = document.createElement(tag);
+    element.className = className;
+    element.textContent = text;
+    output.appendChild(element);
+    return element;
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const question = document.getElementById("question").value.trim();
+    if (!question) return;
+    button.disabled = true;
+    output.replaceChildren();
+    showText("p", "muted", "Searching your private documents…");
+    try {
+      const response = await fetch("{% url 'api-chat' %}", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "X-CSRFToken": csrfToken},
+        body: JSON.stringify({question, top_k: 4}),
+        credentials: "same-origin"
+      });
+      const result = await response.json();
+      output.replaceChildren();
+      if (!response.ok) throw new Error(result.detail || "Could not answer this question.");
+      showText("p", "answer", result.answer);
+      for (const source of result.sources) {
+        const sourceBlock = document.createElement("details");
+        sourceBlock.className = "source-block";
+        const summary = document.createElement("summary");
+        summary.textContent = `${source.source}, page ${source.page}`;
+        const excerpt = document.createElement("p");
+        excerpt.textContent = source.text;
+        sourceBlock.append(summary, excerpt);
+        output.appendChild(sourceBlock);
+      }
+    } catch (error) {
+      output.replaceChildren();
+      showText("p", "notice notice-error", error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+})();
+</script>
+{% endblock %}

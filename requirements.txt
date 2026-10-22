@@ -1,5 +1,4 @@
 # Python 3.10+
-streamlit==1.48.1
 langchain==0.3.27
 langchain-core==0.3.76
 langchain-community==0.3.27
@@ -17,3 +16,8 @@ python-dotenv==1.1.1
 pypdf==5.9.0
 pymupdf==1.26.7
 pytesseract==0.3.13
+Django==5.2.18
+djangorestframework==3.16.1
+djangorestframework-simplejwt==5.5.1
+django-axes==8.3.1
+psycopg[binary]==3.3.6

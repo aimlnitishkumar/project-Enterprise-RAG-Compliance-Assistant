@@ -1,0 +1,24 @@
+{% extends "documents/base.html" %}
+{% block title %}Create account · ShryAI{% endblock %}
+{% block content %}
+<section class="auth-card auth-card-wide">
+  <p class="eyebrow">YOUR PRIVATE RESEARCH SPACE</p>
+  <h1>Create your account</h1>
+  <p class="muted">Your documents and search index are isolated to your account.</p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for field in form %}
+      {% if field.name == "consent" %}
+        <label class="consent-field">{{ field }}<span>{{ field.label }}</span></label>
+      {% else %}
+        <label class="field-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+      {% endif %}
+      {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+      {% if field.help_text %}<p class="field-help">{{ field.help_text }}</p>{% endif %}
+    {% endfor %}
+    <button class="button button-primary full-width" type="submit">Create account</button>
+  </form>
+  <p class="auth-footer">Already registered? <a href="{% url 'login' %}">Sign in</a></p>
+</section>
+{% endblock %}

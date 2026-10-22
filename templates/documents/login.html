@@ -1,0 +1,20 @@
+{% extends "documents/base.html" %}
+{% block title %}Sign in · ShryAI{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <p class="eyebrow">PRIVATE DOCUMENT RESEARCH</p>
+  <h1>Welcome back</h1>
+  <p class="muted">Sign in to your private document workspace.</p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}<p class="notice notice-error">{{ form.non_field_errors }}</p>{% endif %}
+    {% for field in form %}
+      <label class="field-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+    {% endfor %}
+    <button class="button button-primary full-width" type="submit">Sign in</button>
+  </form>
+  <p class="auth-footer">New to ShryAI? <a href="{% url 'register' %}">Create an account</a></p>
+</section>
+{% endblock %}

@@ -6,6 +6,9 @@ __pycache__/
 venv/
 data/uploads/
 data/evaluation_metrics.jsonl
+db.sqlite3
+media/
+staticfiles/
 vector_store/*
 !vector_store/.gitkeep
 !data/.gitkeep
