@@ -1,5 +1,10 @@
 # ShryAI: Project Workflow and Technical Guide
 
+> **Historical document:** This guide describes the original Streamlit
+> prototype. The current authenticated Django/DRF implementation is documented
+> in [README.md](./README.md); do not use this guide as a description of the
+> current security or deployment behavior.
+
 ## 1. Executive summary
 
 ShryAI is a local-first application for asking questions about a collection of

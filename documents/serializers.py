@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from pathlib import PurePosixPath
-
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework.reverse import reverse
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -26,9 +25,10 @@ class RegistrationSerializer(serializers.Serializer):
         return value
 
     def validate_password(self, value: str) -> str:
-        candidate_user = User(username=self.initial_data.get("email", ""))
+        raw_email = self.initial_data.get("email", "")
+        email = raw_email.strip().casefold() if isinstance(raw_email, str) else ""
         try:
-            validate_password(value, user=candidate_user)
+            validate_password(value, user=User(username=email, email=email))
         except DjangoValidationError as exc:
             raise serializers.ValidationError(list(exc.messages)) from exc
         return value
@@ -38,6 +38,7 @@ class RegistrationSerializer(serializers.Serializer):
             raise serializers.ValidationError(PRIVACY_NOTICE)
         return value
 
+    @transaction.atomic
     def create(self, validated_data: dict) -> User:
         from django.utils import timezone
 

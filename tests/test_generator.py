@@ -2,7 +2,7 @@ import unittest
 
 from langchain_core.documents import Document
 
-from src.generator import _citations_are_valid
+from src.generator import SYSTEM_PROMPT, _citations_are_valid
 
 
 class CitationValidationTests(unittest.TestCase):
@@ -27,6 +27,11 @@ class CitationValidationTests(unittest.TestCase):
         self.assertFalse(
             _citations_are_valid("The policy says so [security.pdf, p. 5].", self.documents)
         )
+
+    def test_health_answers_must_not_diagnose_or_replace_a_doctor(self):
+        self.assertIn("do not diagnose", SYSTEM_PROMPT)
+        self.assertIn("their doctor", SYSTEM_PROMPT)
+        self.assertIn("emergency services", SYSTEM_PROMPT)
 
 
 if __name__ == "__main__":

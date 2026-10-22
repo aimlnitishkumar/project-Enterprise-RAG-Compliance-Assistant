@@ -3,12 +3,11 @@ from __future__ import annotations
 import logging
 
 from django.contrib.auth import authenticate
-from django.contrib.auth.models import User
 from django.db import transaction
 from django.http import FileResponse, Http404
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
@@ -76,15 +75,19 @@ class DocumentListCreateAPIView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         document = serializer.save()
+        indexed = False
         try:
             chunks = rebuild_user_index(request.user.pk)
-        except Exception as exc:
-            document.delete()
+            indexed = True
+        except (OSError, RuntimeError, ValueError) as exc:
             logger.exception("Failed to index an uploaded document")
             return Response(
                 {"detail": str(exc)},
                 status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             )
+        finally:
+            if not indexed and document.pk:
+                document.delete()
         return Response(
             {
                 **UserDocumentSerializer(
@@ -165,7 +168,7 @@ class LogoutAPIView(APIView):
                     status=status.HTTP_403_FORBIDDEN,
                 )
             refresh.blacklist()
-        except TokenError as exc:
+        except TokenError:
             return Response(
                 {"detail": "The refresh token is invalid or expired."},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -195,12 +198,13 @@ class AccountAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         user = request.user
+        user_id = user.pk
         try:
-            delete_user_index(user.pk)
+            delete_user_index(user_id)
         except Exception:
             logger.exception("Failed to remove a user's vector collection")
             return Response(
-                {"detail": "Could not securely remove this account's document index."},
+                {"detail": "Could not remove this account's document index."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         with transaction.atomic():

@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -32,14 +33,15 @@ def register(request: HttpRequest) -> HttpResponse:
         return redirect("dashboard")
     form = RegistrationForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        user = form.save(commit=False)
-        user.email = user.username
-        user.save()
-        UserProfile.objects.create(
-            user=user,
-            remote_processing_consent_at=timezone.now(),
-        )
-        login(request, user)
+        with transaction.atomic():
+            user = form.save(commit=False)
+            user.email = user.username
+            user.save()
+            UserProfile.objects.create(
+                user=user,
+                remote_processing_consent_at=timezone.now(),
+            )
+        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         return redirect("dashboard")
     return render(request, "documents/register.html", {"form": form})
 
@@ -89,14 +91,18 @@ def upload_document(request: HttpRequest) -> HttpResponse:
         messages.error(request, "; ".join(serializer.errors.get("file", ["Invalid PDF."])))
         return redirect("dashboard")
     document = serializer.save()
+    indexed = False
     try:
         chunks = rebuild_user_index(request.user.pk)
-    except Exception as exc:
-        document.delete()
+        indexed = True
+    except (OSError, RuntimeError, ValueError) as exc:
         logger.exception("Failed to index an uploaded document")
         messages.error(request, f"Could not index this PDF: {exc}")
-    else:
-        messages.success(request, f"PDF indexed successfully ({chunks} text chunks).")
+        return redirect("dashboard")
+    finally:
+        if not indexed and document.pk:
+            document.delete()
+    messages.success(request, f"PDF indexed successfully ({chunks} text chunks).")
     return redirect("dashboard")
 
 
@@ -137,7 +143,7 @@ def delete_account(request: HttpRequest) -> HttpResponse:
         delete_user_index(user.pk)
     except Exception:
         logger.exception("Failed to remove a user's vector collection")
-        messages.error(request, "Could not securely remove the document index.")
+        messages.error(request, "Could not remove the document index.")
         return redirect("dashboard")
     logout(request)
     user.delete()

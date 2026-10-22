@@ -15,13 +15,13 @@ from langchain_core.prompts import ChatPromptTemplate
 logger = logging.getLogger(__name__)
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
 FALLBACK_ANSWER = (
-    "I cannot find the answer to your question within the provided enterprise documents."
+    "I cannot find the answer to your question within your provided documents."
 )
 SYSTEM_PROMPT = (
     "You are ShryAI, a personal document research assistant. Answer the user query "
     "strictly using the provided context blocks. Do not use outside knowledge or hallucinate. "
     "If the answer cannot be found in the context, output: "
-    "'I cannot find the answer to your question within the provided enterprise documents.' "
+    "'I cannot find the answer to your question within your provided documents.' "
     "Always append inline citations pointing to the source file name and page number for every "
     "claim made. Cite each supported factual claim as [source filename, p. N]. If the context "
     "does not support a claim, do not make that claim. For health-related questions, explain "

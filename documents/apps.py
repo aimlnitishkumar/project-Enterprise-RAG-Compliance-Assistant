@@ -6,6 +6,6 @@ class DocumentsConfig(AppConfig):
     name = "documents"
 
     def ready(self) -> None:
-        from documents import signals
+        from importlib import import_module
 
-        return None
+        import_module("documents.signals")
