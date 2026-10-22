@@ -218,7 +218,10 @@ def _render_sidebar() -> tuple[float, int, int | None]:
             "Add PDF documents",
             type=["pdf"],
             accept_multiple_files=True,
-            help="Uploading and indexing replaces the current index with all saved PDFs.",
+            help=(
+                "Searchable text, scanned pages, and text inside PDF images are indexed. "
+                "OCR requires Tesseract to be installed."
+            ),
         )
         if st.button("Build / refresh index", type="primary", use_container_width=True):
             if not uploads:

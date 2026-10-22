@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import logging
+import os
+import shutil
+from io import BytesIO
 from pathlib import Path
 from typing import Iterable
 
+import fitz
+import pytesseract
+from PIL import Image
 from langchain_chroma import Chroma
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
@@ -16,6 +22,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 DEFAULT_COLLECTION_NAME = "shryai_documents"
+OCR_RENDER_DPI = 200
+TESSERACT_EXECUTABLE = "tesseract.exe"
 
 
 def create_embeddings(model_name: str = DEFAULT_EMBEDDING_MODEL) -> HuggingFaceEmbeddings:
@@ -25,6 +33,98 @@ def create_embeddings(model_name: str = DEFAULT_EMBEDDING_MODEL) -> HuggingFaceE
         model_kwargs={"device": "cpu"},
         encode_kwargs={"normalize_embeddings": True},
     )
+
+
+def _configure_tesseract() -> None:
+    configured_path = os.getenv("SHRYAI_TESSERACT_CMD", "").strip().strip('"')
+    if configured_path:
+        executable = Path(os.path.expandvars(configured_path)).expanduser()
+        if not executable.is_file():
+            raise RuntimeError(
+                f"SHRYAI_TESSERACT_CMD does not point to a file: {executable}"
+            )
+    else:
+        detected_path = shutil.which("tesseract")
+        executable = Path(detected_path) if detected_path else None
+        if executable is None:
+            install_directories = (
+                os.getenv("ProgramFiles", r"C:\Program Files"),
+                os.getenv("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+                str(Path(os.getenv("LOCALAPPDATA", "")) / "Programs"),
+            )
+            executable = next(
+                (
+                    Path(directory) / "Tesseract-OCR" / TESSERACT_EXECUTABLE
+                    for directory in install_directories
+                    if (Path(directory) / "Tesseract-OCR" / TESSERACT_EXECUTABLE).is_file()
+                ),
+                None,
+            )
+            if executable is None:
+                raise RuntimeError(
+                    "Tesseract OCR was not found on PATH or in its standard Windows "
+                    "install location. Restart the terminal after installing it, or "
+                    "set SHRYAI_TESSERACT_CMD to the full path of tesseract.exe."
+                )
+
+    pytesseract.pytesseract.tesseract_cmd = str(executable)
+
+
+def _ocr_image(image: Image.Image) -> str:
+    _configure_tesseract()
+    try:
+        return pytesseract.image_to_string(image).strip()
+    except pytesseract.pytesseract.TesseractNotFoundError as exc:
+        raise RuntimeError(
+            "Tesseract OCR could not be launched. Set SHRYAI_TESSERACT_CMD to the "
+            "full path of tesseract.exe, or add its installation directory to PATH."
+        ) from exc
+
+
+def _extract_image_text(pdf: fitz.Document, page: fitz.Page) -> list[str]:
+    image_text: list[str] = []
+    seen_xrefs: set[int] = set()
+    for image_info in page.get_images(full=True):
+        xref = image_info[0]
+        if xref in seen_xrefs:
+            continue
+        seen_xrefs.add(xref)
+        image_bytes = pdf.extract_image(xref)["image"]
+        with Image.open(BytesIO(image_bytes)) as image:
+            with image.convert("RGB") as rgb_image:
+                text = _ocr_image(rgb_image)
+        if text:
+            image_text.append(text)
+    return image_text
+
+
+def _extract_pdf_pages(path: Path) -> list[Document]:
+    pages = PyPDFLoader(str(path)).load()
+    with fitz.open(path) as pdf:
+        for page_number, pdf_page in enumerate(pdf):
+            page_text = pages[page_number].page_content or ""
+            if page_text.strip():
+                image_text = _extract_image_text(pdf, pdf_page)
+                if image_text:
+                    pages[page_number].page_content = (
+                        f"{page_text.rstrip()}\n\n"
+                        "[Text recognized in images]\n"
+                        + "\n\n".join(image_text)
+                    )
+                continue
+
+            pixmap = pdf_page.get_pixmap(
+                dpi=OCR_RENDER_DPI,
+                colorspace=fitz.csRGB,
+                alpha=False,
+            )
+            with Image.frombytes(
+                "RGB",
+                (pixmap.width, pixmap.height),
+                pixmap.samples,
+            ) as page_image:
+                pages[page_number].page_content = _ocr_image(page_image)
+    return pages
 
 
 def load_and_split_pdfs(
@@ -54,7 +154,7 @@ def load_and_split_pdfs(
             raise ValueError(f"Only PDF files can be indexed: {path.name}")
 
         try:
-            pages = PyPDFLoader(str(path)).load()
+            pages = _extract_pdf_pages(path)
         except Exception:
             logger.exception("Failed to load PDF %s", path)
             raise
@@ -64,9 +164,9 @@ def load_and_split_pdfs(
         ]
         if not pages_with_text:
             raise ValueError(
-                f"{path.name} has no extractable text. It may be a scanned or "
-                "image-only PDF. Run OCR on the PDF or upload a searchable/text-based "
-                "PDF, then try indexing again."
+                f"{path.name} has no readable text. OCR could not detect text in its "
+                "pages or images. Check that the PDF contains legible text and that "
+                "the required Tesseract language data is installed."
             )
         empty_page_numbers = [
             int(page.metadata.get("page", 0)) + 1

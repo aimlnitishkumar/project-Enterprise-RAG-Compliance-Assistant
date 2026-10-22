@@ -100,18 +100,27 @@ Question ────────────────┼──────�
    `RecursiveCharacterTextSplitter` into chunks of 500 characters with 50
    characters of overlap. Source filename and one-based page number are kept
    as chunk metadata.
-5. `sentence-transformers/all-MiniLM-L6-v2` creates normalized embeddings on
-   the CPU. The chunks and metadata are written to the persistent ChromaDB
-   collection in `vector_store/`.
+5. PyMuPDF and Tesseract OCR read scanned pages and text embedded in images.
+   Recognized text is combined with selectable PDF text and keeps the original
+   source filename and page number. `sentence-transformers/all-MiniLM-L6-v2`
+   creates normalized embeddings on the CPU. The chunks and metadata are written
+   to the persistent ChromaDB collection in `vector_store/`.
 
 Index rebuilds replace the collection contents with the contents of the PDFs
 currently staged in `data/uploads/`. This makes deleting a staged PDF followed
 by a rebuild the way to remove that document from the index. Uploading files
 does not automatically remove other staged PDFs.
 
-The loader extracts embedded/searchable text; it does not perform OCR. Scanned
-or image-only PDFs need to be OCR-processed and saved as searchable PDFs before
-they can be indexed. Empty pages in otherwise readable PDFs are skipped and
+Image OCR requires the Tesseract OCR executable in addition to the Python
+dependencies. On Windows, install it with
+`winget install --id UB-Mannheim.TesseractOCR -e`. ShryAI searches `PATH` and
+the standard Tesseract installation directories, so it can find an installation
+even if the terminal's `PATH` has not refreshed yet. If it is installed in a
+custom location, set `SHRYAI_TESSERACT_CMD` in `.env` to the full
+`tesseract.exe` path. If Tesseract is not available, indexing reports an
+actionable error when OCR is needed. OCR extracts readable text from scanned
+pages and raster images; it does not interpret visual content such as unlabeled
+diagrams or photographs. Empty pages with no extractable text are skipped and
 reported in the application log.
 
 ### Retrieval and answer generation
@@ -149,8 +158,7 @@ proxies:
 
 These are simple token-overlap heuristics. They are **not** canonical RAGAS
 Faithfulness or Answer Relevance metrics and should not be treated as proof of
-correctness. Although `ragas` is present in the dependency list for future
-experiments, the current UI does not run RAGAS metrics.
+correctness. The current UI does not run RAGAS metrics.
 
 When evaluation is run, ShryAI appends a JSON Lines record to
 `data/evaluation_metrics.jsonl` containing a UTC timestamp, the two metric
@@ -224,6 +232,14 @@ If PowerShell blocks virtual-environment activation, use the Python executable
 inside `.venv` directly (for example,
 `.\.venv\Scripts\python.exe -m pip install -r requirements.txt`), or follow
 your organization's policy for enabling local scripts.
+
+For an existing virtual environment created before this dependency list was
+updated, remove the unused RAGAS packages once because pip does not uninstall
+packages that are no longer listed:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip uninstall -y ragas datasets
+```
 
 On macOS or Linux, the equivalent virtual-environment activation command is
 `source .venv/bin/activate`.
@@ -341,8 +357,8 @@ excluded by the repository's `.gitignore`.
 - **Evaluation log:** metric-only records are appended to
   `data/evaluation_metrics.jsonl`; query, answer, and document text are not
   included in those records.
-- **No OCR:** image-only/scanned PDFs are not readable until OCR has produced a
-  searchable PDF.
+- **OCR limits:** OCR reads text in scanned pages and raster images, but does
+  not interpret unlabeled diagrams or photographs.
 - **No access control:** the app is intended for local use. It does not
   authenticate users or enforce document permissions.
 - **No compliance guarantee:** citation validation checks that citations
@@ -359,10 +375,13 @@ the organization's formal review process.
 
 ## Maintenance and troubleshooting
 
-### A PDF has no extractable text
+### OCR cannot read a PDF
 
-The source may be scanned or image-only. OCR it (for example with OCRmyPDF and
-Tesseract), save a searchable PDF, upload that version, and rebuild the index.
+Install Tesseract OCR, confirm `tesseract.exe` is on `PATH`, restart the
+terminal running ShryAI, and rebuild the index. OCR works best with clear,
+high-resolution scans; for other languages, install the matching Tesseract
+language data. If the page contains no readable text, OCR cannot make it
+searchable.
 
 ### An answer says it cannot find evidence
 
@@ -390,7 +409,6 @@ vector store does not remove uploaded PDFs or evaluation logs.
 The following are potential extensions, not capabilities of the current
 implementation:
 
-- OCR integration and clearer PDF ingestion diagnostics.
 - Incremental indexing and a document-management interface.
 - Authentication, authorization, and document-level access controls.
 - More robust semantic evaluation with curated reference datasets and
